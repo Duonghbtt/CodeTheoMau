@@ -1,8 +1,10 @@
 import difflib
 import html
+import io
 import json
 import re
 import time
+import tokenize
 from dataclasses import dataclass
 
 import streamlit as st
@@ -125,6 +127,26 @@ def normalize_code(code: str, ignore_trailing_spaces: bool, ignore_empty_lines: 
         lines = [line for line in lines if line.strip()]
 
     return "\n".join(lines)
+
+
+def remove_python_comments(code: str) -> str:
+    try:
+        tokens = tokenize.generate_tokens(io.StringIO(code).readline)
+        kept_tokens = []
+        for token in tokens:
+            token_type, token_text, _, _, _ = token
+            if token_type == tokenize.COMMENT:
+                continue
+            kept_tokens.append(token)
+        uncommented = tokenize.untokenize(kept_tokens)
+    except tokenize.TokenError:
+        uncommented = "\n".join(
+            line for line in code.split("\n") if not line.lstrip().startswith("#")
+        )
+
+    return "\n".join(
+        line for line in uncommented.split("\n") if not line.lstrip().startswith("#")
+    )
 
 
 def compare_code(expected: str, actual: str) -> CompareResult:
@@ -428,12 +450,12 @@ def main() -> None:
             components.html("<script>setTimeout(() => parent.location.reload(), 1000)</script>", height=0)
 
     expected = normalize_code(
-        st.session_state.sample_code,
+        remove_python_comments(st.session_state.sample_code),
         ignore_trailing_spaces=ignore_trailing_spaces,
         ignore_empty_lines=ignore_empty_lines,
     )
     actual = normalize_code(
-        st.session_state.practice_code,
+        remove_python_comments(st.session_state.practice_code),
         ignore_trailing_spaces=ignore_trailing_spaces,
         ignore_empty_lines=ignore_empty_lines,
     )
@@ -477,7 +499,7 @@ def main() -> None:
     if expected == actual:
         st.success("Chinh xac. Ban da go khop mau hien tai.")
     else:
-        st.info("Mau do: sai hoac thieu. Mau vang: ky tu thua.")
+        st.info("Mau do: sai hoac thieu. Mau vang: ky tu thua. Cac dong chu thich khong tinh diem.")
 
 
 if __name__ == "__main__":
