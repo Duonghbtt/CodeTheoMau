@@ -149,6 +149,33 @@ def remove_python_comments(code: str) -> str:
     )
 
 
+def code_content_signature(code: str) -> str:
+    try:
+        tokens = tokenize.generate_tokens(io.StringIO(code).readline)
+        content_tokens = []
+        ignored_types = {
+            tokenize.COMMENT,
+            tokenize.ENCODING,
+            tokenize.ENDMARKER,
+            tokenize.INDENT,
+            tokenize.DEDENT,
+            tokenize.NEWLINE,
+            tokenize.NL,
+        }
+
+        for token in tokens:
+            token_type, token_text, _, _, _ = token
+            if token_type in ignored_types:
+                continue
+            if token_text.strip():
+                content_tokens.append(token_text)
+
+        return " ".join(content_tokens)
+    except tokenize.TokenError:
+        uncommented = remove_python_comments(code)
+        return " ".join(uncommented.split())
+
+
 def compare_code(expected: str, actual: str) -> CompareResult:
     matcher = difflib.SequenceMatcher(None, expected, actual)
     matched = sum(block.size for block in matcher.get_matching_blocks())
@@ -450,12 +477,12 @@ def main() -> None:
             components.html("<script>setTimeout(() => parent.location.reload(), 1000)</script>", height=0)
 
     expected = normalize_code(
-        remove_python_comments(st.session_state.sample_code),
+        code_content_signature(st.session_state.sample_code),
         ignore_trailing_spaces=ignore_trailing_spaces,
         ignore_empty_lines=ignore_empty_lines,
     )
     actual = normalize_code(
-        remove_python_comments(st.session_state.practice_code),
+        code_content_signature(st.session_state.practice_code),
         ignore_trailing_spaces=ignore_trailing_spaces,
         ignore_empty_lines=ignore_empty_lines,
     )
@@ -488,7 +515,7 @@ def main() -> None:
         placeholder="Go lai code mau tai day...",
     )
 
-    st.subheader("Kiem tra loi")
+    st.subheader("Kiem tra noi dung code")
     st.markdown(
         "<div class='diff-panel'>"
         + render_diff_panel(expected, actual)
@@ -499,7 +526,7 @@ def main() -> None:
     if expected == actual:
         st.success("Chinh xac. Ban da go khop mau hien tai.")
     else:
-        st.info("Mau do: sai hoac thieu. Mau vang: ky tu thua. Cac dong chu thich khong tinh diem.")
+        st.info("Mau do: sai hoac thieu. Mau vang: ky tu thua. Chi cham noi dung code, khong cham chu thich hay vi tri dong.")
 
 
 if __name__ == "__main__":
