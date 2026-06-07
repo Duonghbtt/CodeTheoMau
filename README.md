@@ -11,6 +11,7 @@ streamlit run app.py
 ## Tinh nang
 
 - Tai file mau `.py` hoac `.ipynb`.
+- File `.ipynb` duoc tach theo tung code cell de luyen rieng.
 - Hien mau code ben trai va vung go lai ben phai.
 - So sanh trong luc go bang khung loi theo dong.
 - Mau do: ky tu sai hoac thieu.

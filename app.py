@@ -39,6 +39,8 @@ class CompareResult:
 def init_state() -> None:
     defaults = {
         "sample_code": DEFAULT_SAMPLE,
+        "sample_cells": [DEFAULT_SAMPLE],
+        "selected_cell_index": 0,
         "practice_code": "",
         "timer_running": False,
         "timer_started_at": None,
@@ -48,7 +50,7 @@ def init_state() -> None:
         st.session_state.setdefault(key, value)
 
 
-def extract_uploaded_code(uploaded_file) -> str:
+def extract_uploaded_cells(uploaded_file) -> list[str]:
     raw = uploaded_file.read()
     name = uploaded_file.name.lower()
 
@@ -56,12 +58,17 @@ def extract_uploaded_code(uploaded_file) -> str:
         notebook = json.loads(raw.decode("utf-8"))
         code_cells = []
         for cell in notebook.get("cells", []):
-            if cell.get("cell_type") == "code":
-                source = cell.get("source", "")
-                code_cells.append(source_to_text(source))
-        return "\n\n".join(code_cells).replace("\r\n", "\n")
+            if cell.get("cell_type") != "code":
+                continue
 
-    return raw.decode("utf-8").replace("\r\n", "\n")
+            source = cell.get("source", "")
+            text = clean_notebook_text(source_to_text(source))
+            if text.strip():
+                code_cells.append(text)
+
+        return code_cells or [""]
+
+    return [raw.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")]
 
 
 def source_to_text(source) -> str:
@@ -78,6 +85,11 @@ def source_to_text(source) -> str:
         return ""
 
     return "" if source is None else str(source)
+
+
+def clean_notebook_text(text: str) -> str:
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    return "\n".join(line for line in lines if "[object Object]" not in line)
 
 
 def normalize_code(code: str, ignore_trailing_spaces: bool, ignore_empty_lines: bool) -> str:
@@ -99,11 +111,7 @@ def compare_code(expected: str, actual: str) -> CompareResult:
     expected_chars = len(expected)
     actual_chars = len(actual)
     percent = 100.0 if expected_chars == actual_chars == 0 else matcher.ratio() * 100
-
-    issues = 0
-    for tag, _, _, _, _ in matcher.get_opcodes():
-        if tag != "equal":
-            issues += 1
+    issues = sum(1 for tag, _, _, _, _ in matcher.get_opcodes() if tag != "equal")
 
     return CompareResult(percent, issues, matched, expected_chars, actual_chars)
 
@@ -144,35 +152,9 @@ def render_diff_panel(expected: str, actual: str) -> str:
         actual_line = actual_lines[idx] if idx < len(actual_lines) else ""
         is_ok = expected_line == actual_line
         status = "ok" if is_ok else "bad"
-        marker = "✓" if is_ok else "!"
-        rendered = html.escape(actual_line) if is_ok else render_char_diff(expected_line, actual_line)
-        if not actual_line and expected_line:
-            rendered = f"<span class='missing'>{html.escape(expected_line)}</span>"
-
-        rows.append(
-            "<div class='diff-row'>"
-            f"<span class='line-no'>{idx + 1}</span>"
-            f"<span class='line-status {status}'>{marker}</span>"
-            f"<code>{rendered}</code>"
-            "</div>"
-        )
-
-    return "\n".join(rows)
-
-
-def render_diff_panel(expected: str, actual: str) -> str:
-    expected_lines = expected.split("\n")
-    actual_lines = actual.split("\n")
-    rows = []
-    total = max(len(expected_lines), len(actual_lines))
-
-    for idx in range(total):
-        expected_line = expected_lines[idx] if idx < len(expected_lines) else ""
-        actual_line = actual_lines[idx] if idx < len(actual_lines) else ""
-        is_ok = expected_line == actual_line
-        status = "ok" if is_ok else "bad"
         marker = "OK" if is_ok else "!"
         rendered = html.escape(actual_line) if is_ok else render_char_diff(expected_line, actual_line)
+
         if not actual_line and expected_line:
             rendered = f"<span class='missing'>{html.escape(expected_line)}</span>"
 
@@ -220,12 +202,26 @@ def reset_timer() -> None:
     st.session_state.elapsed_before_start = 0.0
 
 
+def set_sample_from_selected_cell() -> None:
+    cells = st.session_state.get("sample_cells", [DEFAULT_SAMPLE])
+    index = int(st.session_state.get("selected_cell_index", 0))
+    index = max(0, min(index, len(cells) - 1))
+    st.session_state.selected_cell_index = index
+    st.session_state.sample_code = cells[index]
+    st.session_state.practice_code = ""
+    reset_timer()
+
+
 def load_sample_from_upload() -> None:
     uploaded = st.session_state.get("uploaded_sample")
-    if uploaded is not None:
-        st.session_state.sample_code = extract_uploaded_code(uploaded)
-        st.session_state.practice_code = ""
-        reset_timer()
+    if uploaded is None:
+        return
+
+    st.session_state.sample_cells = extract_uploaded_cells(uploaded)
+    st.session_state.selected_cell_index = 0
+    st.session_state.sample_code = st.session_state.sample_cells[0]
+    st.session_state.practice_code = ""
+    reset_timer()
 
 
 def app_css() -> None:
@@ -265,7 +261,7 @@ def app_css() -> None:
 
         .diff-row {
             display: grid;
-            grid-template-columns: 42px 24px minmax(0, 1fr);
+            grid-template-columns: 42px 28px minmax(0, 1fr);
             gap: 6px;
             padding: 1px 10px;
             border-bottom: 1px solid #eef1f5;
@@ -287,15 +283,16 @@ def app_css() -> None:
         }
 
         .line-status {
-            width: 18px;
+            min-width: 22px;
             height: 18px;
             border-radius: 999px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 700;
             margin-top: 1px;
+            padding: 0 4px;
         }
 
         .line-status.ok {
@@ -353,8 +350,18 @@ def main() -> None:
             on_change=load_sample_from_upload,
         )
 
+        sample_cells = st.session_state.get("sample_cells", [st.session_state.sample_code])
+        if len(sample_cells) > 1:
+            st.selectbox(
+                "Chon code cell",
+                options=list(range(len(sample_cells))),
+                format_func=lambda idx: f"Cell {idx + 1} - {len(sample_cells[idx].splitlines())} dong",
+                key="selected_cell_index",
+                on_change=set_sample_from_selected_cell,
+            )
+
         st.text_area(
-            "Hoac dan mau vao day",
+            "Hoac sua/dan mau vao day",
             key="sample_code",
             height=220,
         )
@@ -403,7 +410,11 @@ def main() -> None:
     left, right = st.columns([1, 1], gap="large")
 
     with left:
-        st.subheader("Mau can go")
+        cell_count = len(st.session_state.get("sample_cells", []))
+        if cell_count > 1:
+            st.subheader(f"Mau can go - Cell {st.session_state.selected_cell_index + 1}/{cell_count}")
+        else:
+            st.subheader("Mau can go")
         st.markdown(
             "<div class='code-box'><pre><code>"
             + html.escape(st.session_state.sample_code)
