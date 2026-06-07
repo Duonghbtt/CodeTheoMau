@@ -58,10 +58,26 @@ def extract_uploaded_code(uploaded_file) -> str:
         for cell in notebook.get("cells", []):
             if cell.get("cell_type") == "code":
                 source = cell.get("source", "")
-                code_cells.append("".join(source) if isinstance(source, list) else source)
+                code_cells.append(source_to_text(source))
         return "\n\n".join(code_cells).replace("\r\n", "\n")
 
     return raw.decode("utf-8").replace("\r\n", "\n")
+
+
+def source_to_text(source) -> str:
+    if isinstance(source, str):
+        return source
+
+    if isinstance(source, list):
+        return "".join(source_to_text(item) for item in source)
+
+    if isinstance(source, dict):
+        for key in ("source", "text", "code", "value"):
+            if key in source:
+                return source_to_text(source[key])
+        return ""
+
+    return "" if source is None else str(source)
 
 
 def normalize_code(code: str, ignore_trailing_spaces: bool, ignore_empty_lines: bool) -> str:
@@ -129,6 +145,33 @@ def render_diff_panel(expected: str, actual: str) -> str:
         is_ok = expected_line == actual_line
         status = "ok" if is_ok else "bad"
         marker = "✓" if is_ok else "!"
+        rendered = html.escape(actual_line) if is_ok else render_char_diff(expected_line, actual_line)
+        if not actual_line and expected_line:
+            rendered = f"<span class='missing'>{html.escape(expected_line)}</span>"
+
+        rows.append(
+            "<div class='diff-row'>"
+            f"<span class='line-no'>{idx + 1}</span>"
+            f"<span class='line-status {status}'>{marker}</span>"
+            f"<code>{rendered}</code>"
+            "</div>"
+        )
+
+    return "\n".join(rows)
+
+
+def render_diff_panel(expected: str, actual: str) -> str:
+    expected_lines = expected.split("\n")
+    actual_lines = actual.split("\n")
+    rows = []
+    total = max(len(expected_lines), len(actual_lines))
+
+    for idx in range(total):
+        expected_line = expected_lines[idx] if idx < len(expected_lines) else ""
+        actual_line = actual_lines[idx] if idx < len(actual_lines) else ""
+        is_ok = expected_line == actual_line
+        status = "ok" if is_ok else "bad"
+        marker = "OK" if is_ok else "!"
         rendered = html.escape(actual_line) if is_ok else render_char_diff(expected_line, actual_line)
         if not actual_line and expected_line:
             rendered = f"<span class='missing'>{html.escape(expected_line)}</span>"
