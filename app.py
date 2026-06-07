@@ -1,6 +1,7 @@
 import difflib
 import html
 import json
+import re
 import time
 from dataclasses import dataclass
 
@@ -89,7 +90,28 @@ def source_to_text(source) -> str:
 
 def clean_notebook_text(text: str) -> str:
     lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
-    return "\n".join(line for line in lines if "[object Object]" not in line)
+    cleaned = []
+    for line in lines:
+        line = re.sub(r",?\s*\[object\s+object\]\s*,?", "", line, flags=re.IGNORECASE)
+        if line.strip():
+            cleaned.append(line)
+    return "\n".join(cleaned)
+
+
+def sanitize_session_sample() -> None:
+    sample_code = clean_notebook_text(st.session_state.sample_code)
+    if sample_code != st.session_state.sample_code:
+        st.session_state.sample_code = sample_code
+
+    cells = st.session_state.get("sample_cells", [])
+    cleaned_cells = [clean_notebook_text(cell) for cell in cells]
+    cleaned_cells = [cell for cell in cleaned_cells if cell.strip()]
+    if cleaned_cells and cleaned_cells != cells:
+        st.session_state.sample_cells = cleaned_cells
+        st.session_state.selected_cell_index = min(
+            int(st.session_state.selected_cell_index),
+            len(cleaned_cells) - 1,
+        )
 
 
 def normalize_code(code: str, ignore_trailing_spaces: bool, ignore_empty_lines: bool) -> str:
@@ -337,6 +359,7 @@ def app_css() -> None:
 
 def main() -> None:
     init_state()
+    sanitize_session_sample()
     app_css()
 
     st.title("Luyen code theo mau")
