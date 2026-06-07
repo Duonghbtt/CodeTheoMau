@@ -266,19 +266,34 @@ def app_css() -> None:
             overflow: auto;
         }
 
+        .code-box {
+            min-height: 320px;
+            max-height: 48vh;
+            resize: vertical;
+        }
+
         .code-box pre {
             margin: 0;
-            padding: 14px;
-            font-size: 13px;
+            padding: 16px 18px;
+            font-size: 14px;
             line-height: 1.55;
-            white-space: pre-wrap;
+            white-space: pre;
+            min-width: max-content;
         }
 
         .diff-panel {
-            max-height: 44vh;
+            min-height: 220px;
+            max-height: 38vh;
+            resize: vertical;
             font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
             font-size: 13px;
             line-height: 1.55;
+        }
+
+        textarea {
+            font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace !important;
+            line-height: 1.55 !important;
+            resize: vertical !important;
         }
 
         .diff-row {
@@ -430,30 +445,26 @@ def main() -> None:
     top_cols[2].metric("Ky tu mau", result.expected_chars)
     top_cols[3].metric("Ky tu da go", result.actual_chars)
 
-    left, right = st.columns([1, 1], gap="large")
+    cell_count = len(st.session_state.get("sample_cells", []))
+    if cell_count > 1:
+        st.subheader(f"Mau can go - Cell {st.session_state.selected_cell_index + 1}/{cell_count}")
+    else:
+        st.subheader("Mau can go")
+    st.markdown(
+        "<div class='code-box'><pre><code>"
+        + html.escape(st.session_state.sample_code)
+        + "</code></pre></div>",
+        unsafe_allow_html=True,
+    )
 
-    with left:
-        cell_count = len(st.session_state.get("sample_cells", []))
-        if cell_count > 1:
-            st.subheader(f"Mau can go - Cell {st.session_state.selected_cell_index + 1}/{cell_count}")
-        else:
-            st.subheader("Mau can go")
-        st.markdown(
-            "<div class='code-box'><pre><code>"
-            + html.escape(st.session_state.sample_code)
-            + "</code></pre></div>",
-            unsafe_allow_html=True,
-        )
-
-    with right:
-        st.subheader("Bai go cua ban")
-        st.text_area(
-            "Nhap code",
-            key="practice_code",
-            height=360,
-            label_visibility="collapsed",
-            placeholder="Go lai code mau tai day...",
-        )
+    st.subheader("Bai go cua ban")
+    st.text_area(
+        "Nhap code",
+        key="practice_code",
+        height=520,
+        label_visibility="collapsed",
+        placeholder="Go lai code mau tai day...",
+    )
 
     st.subheader("Kiem tra loi")
     st.markdown(
